@@ -128,6 +128,18 @@
     editors[activeField]?.format(command);
   }
 
+  // Like Anki: inline, block, and chemistry (inline with \ce{...}). Stored as \(...\) / \[...\].
+  const MATHJAX = {
+    inline: { block: false, prefix: '', suffix: '' },
+    block: { block: true, prefix: '', suffix: '' },
+    chemistry: { block: false, prefix: '\\ce{', suffix: '}' },
+  } as const;
+
+  function mathjax(kind: keyof typeof MATHJAX): void {
+    const { block, prefix, suffix } = MATHJAX[kind];
+    editors[activeField]?.insertMath(block, prefix, suffix);
+  }
+
   function cloze(sameNumber: boolean): void {
     const numbers = [...values.fields.join(' ').matchAll(/\{\{c(\d+)::/g)].map((m) => Number(m[1]));
     const highest = numbers.length ? Math.max(...numbers) : 0;
@@ -142,17 +154,52 @@
     if (files.length) await editors[activeField]?.insertFiles(files);
   }
 
+  // Keyboard shortcuts, matching Anki desktop's editor:
+  //   Ctrl+, / Ctrl+.              bullet / numbered list
+  //   Ctrl+Shift+, / Ctrl+Shift+.  outdent / indent (inside lists)
+  //   Ctrl+M, M / E / C            MathJax inline / block / chemistry
+  //   Ctrl+Shift+C (+Alt)          cloze (same number)
+  //   Ctrl+Enter                   add / save
+  // Ctrl+M starts a chord: the next key picks the kind, and any other key cancels it.
+  let chord = $state<'mathjax' | null>(null);
+  const MODIFIER_KEYS = new Set(['Control', 'Meta', 'Shift', 'Alt', 'AltGraph']);
+
   function onKeydown(event: KeyboardEvent): void {
     const mod = event.ctrlKey || event.metaKey;
+    const key = event.key.toLowerCase();
+    const inField = !!(event.target as HTMLElement | null)?.closest?.('.field');
+
+    if (chord) {
+      if (MODIFIER_KEYS.has(event.key)) return; // still waiting for the second key
+      chord = null;
+      const kind = ({ m: 'inline', e: 'block', c: 'chemistry' } as const)[key as 'm' | 'e' | 'c'];
+      if (kind && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        mathjax(kind);
+        return;
+      }
+      // Anything else cancels the chord and behaves normally.
+    }
+
     if (mod && event.key === 'Enter') {
       event.preventDefault();
       submit();
-    } else if (mod && event.shiftKey && event.code === 'KeyC' && notetype?.is_cloze) {
-      event.preventDefault();
-      cloze(event.altKey);
     } else if (event.key === 'Escape' && oncancel) {
       event.preventDefault();
       oncancel();
+    } else if (!inField || !mod) {
+      return;
+    } else if (key === 'm' && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      chord = 'mathjax';
+    } else if (event.code === 'Comma' || event.code === 'Period') {
+      event.preventDefault();
+      const field = editors[activeField];
+      if (event.shiftKey) field?.indent(event.code === 'Comma');
+      else field?.format(event.code === 'Comma' ? 'insertUnorderedList' : 'insertOrderedList');
+    } else if (event.shiftKey && event.code === 'KeyC' && notetype?.is_cloze) {
+      event.preventDefault();
+      cloze(event.altKey);
     }
   }
 
@@ -222,6 +269,12 @@
     <button type="button" onmousedown={noFocusSteal} onclick={() => format('subscript')} title="Subscript"><span>x<sub>2</sub></span></button>
     <button type="button" onmousedown={noFocusSteal} onclick={() => format('removeFormat')} title="Clear formatting"><span>T<sub>×</sub></span></button>
     <span class="sep"></span>
+    <button type="button" onmousedown={noFocusSteal} onclick={() => format('insertUnorderedList')} title="Bullet list (Ctrl+,)" aria-label="Bullet list"><Icon name="list" size={17} /></button>
+    <button type="button" onmousedown={noFocusSteal} onclick={() => format('insertOrderedList')} title="Numbered list (Ctrl+.)" aria-label="Numbered list"><Icon name="listOrdered" size={17} /></button>
+    <span class="sep"></span>
+    <button type="button" class="math" onmousedown={noFocusSteal} onclick={() => mathjax('inline')} title="MathJax inline (Ctrl+M, M)" aria-label="MathJax inline">\(&#8202;\)</button>
+    <button type="button" class="math" onmousedown={noFocusSteal} onclick={() => mathjax('block')} title="MathJax block (Ctrl+M, E)" aria-label="MathJax block">\[&#8202;\]</button>
+    <span class="sep"></span>
     {#if notetype?.is_cloze}
       <button type="button" class="wide" onmousedown={noFocusSteal} onclick={() => cloze(false)} title="Cloze deletion (Ctrl+Shift+C; add Alt to reuse the number)">[…] Cloze</button>
     {/if}
@@ -229,6 +282,11 @@
       <Icon name="image" size={16} /> Media
     </button>
     <input bind:this={fileInput} type="file" accept="image/*,audio/*" multiple hidden onchange={onFilesChosen} />
+    {#if chord}
+      <span class="chord-hint" role="status">
+        MathJax: <kbd>M</kbd> inline · <kbd>E</kbd> block · <kbd>C</kbd> chemistry
+      </span>
+    {/if}
   </div>
 
   <div class="fields">
@@ -346,6 +404,27 @@
   .toolbar .wide {
     font-size: 0.875rem;
     font-weight: 500;
+  }
+  .toolbar .math {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.8rem;
+    letter-spacing: -0.02em;
+  }
+  .chord-hint {
+    margin-left: auto;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+  .chord-hint kbd {
+    padding: 0 5px;
+    border: 1px solid var(--accent-border);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.75rem;
   }
   .sep {
     width: 1px;

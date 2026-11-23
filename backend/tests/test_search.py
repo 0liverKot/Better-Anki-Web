@@ -107,3 +107,10 @@ def test_type_answer_preview_shows_expected(client: Client) -> None:
     card = client.get(f"/api/notes/{note_id}").json()["cards"][0]
     assert "el gato" in card["answer"]
     assert "[[type:" not in card["answer"] and "typeMissed" not in card["answer"]
+
+
+def test_snippets_separate_lines_and_list_items(client: Client) -> None:
+    add_basic(client, "Fruit<div><ul><li>apple</li><li>banana</li></ul></div>", "one<br>two")
+    note = client.get("/api/search", params={"q": "banana"}).json()["notes"][0]
+    assert note["fields"][0]["text"] == "Fruit apple banana"
+    assert note["fields"][1]["text"] == "one two"

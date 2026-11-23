@@ -44,6 +44,9 @@ code#typeans { display: block; font-family: ui-monospace, Menlo, Consolas, monos
 .nightMode .replay-button svg circle { fill: #3a3f47; stroke: #e9ecef; }
 .nightMode .replay-button svg path { fill: #e9ecef; }
 .baw-video { max-width: 100%; display: block; margin: 8px auto; }
+/* Lists in centred cards: centre the list as a block but keep its items left-aligned
+   next to their bullets (otherwise the text centres and the bullets stay far left). */
+.baw-centered-list { display: table; margin-left: auto; margin-right: auto; text-align: left; }
 `;
 
 // Plain ES5 so it runs before (and independently of) whatever the card's own JS does.
@@ -128,6 +131,14 @@ const BRIDGE_JS = `(function () {
     }
   });
   window.addEventListener('pagehide', stop);
+  // Mark top-level lists that would inherit centred text (see .baw-centered-list).
+  var lists = document.querySelectorAll('#qa ul, #qa ol');
+  for (var i = 0; i < lists.length; i++) {
+    var list = lists[i];
+    if (list.parentElement && list.parentElement.closest('li')) continue;
+    var align = getComputedStyle(list).textAlign;
+    if (align === 'center' || align === '-webkit-center') list.classList.add('baw-centered-list');
+  }
   window.addEventListener('load', function () {
     if (cfg.autoplay) play(tagsFor(cfg.side));
   });

@@ -21,6 +21,9 @@
     logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
     x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    list: '<path d="M9 6h12"/><path d="M9 12h12"/><path d="M9 18h12"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/>',
+    listOrdered:
+      '<path d="M10 6h11"/><path d="M10 12h11"/><path d="M10 18h11"/><path d="M4 4h1v5"/><path d="M4 9h2"/><path d="M6.5 20H3.5c0-1.2 3-2 3-3.5 0-.8-.7-1.5-1.5-1.5S3.5 15.6 3.5 16"/>',
   } as const;
   export type IconName = keyof typeof PATHS;
 </script>

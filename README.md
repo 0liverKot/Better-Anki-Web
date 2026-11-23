@@ -35,6 +35,13 @@ desktop keep syncing with AnkiWeb as usual.
   images, audio/video (`[sound:...]`), text-to-speech tags and type-in-the-answer
 - Add cards with any note type: cloze shortcut, paste/drop images and audio, tag suggestions,
   sticky fields, and duplicate warnings
+- Editor shortcuts match Anki desktop:
+  - Ctrl+, / Ctrl+. for bullet / numbered lists, and Ctrl+Shift+, / . to outdent / indent.
+  - Ctrl+M then M / E / C for MathJax inline `\(…\)` / block `\[…\]` / chemistry.
+    As in Anki, formulas show rendered in a box while editing; click one to edit its TeX
+    with a live preview. Fields are still stored in Anki's normal `\(…\)` form.
+  - Ctrl+Shift+C for cloze, and Ctrl+Shift+X to edit a field's HTML.
+  - (Anki's LaTeX shortcuts aren't available: browsers reserve Ctrl+T.)
 - Search your cards across all decks or one deck (subdecks included):
   - Plain words match the front or back, with matches highlighted.
   - Anki's search syntax also works (`"exact phrase"`, `-word`, `front:x`, `tag:x`, `is:due`).

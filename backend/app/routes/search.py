@@ -39,12 +39,17 @@ CLOZE_TYPE = 1
 
 
 SOUND_RE = re.compile(r"\[sound:([^\]]+)\]")
+# Line breaks and block elements become spaces, so "<li>a</li><li>b</li>" reads "a b".
+BLOCK_RE = re.compile(
+    r"<(?:br|/?(?:div|p|li|ul|ol|tr|td|th|h[1-6]|blockquote|pre|dt|dd))\b[^>]*>", re.IGNORECASE
+)
 SPACE_RE = re.compile(r"\s+")
 
 
 def _text(html: str, limit: int | None = SNIPPET_CHARS) -> str:
     """Field HTML as one line of plain text (media shown as filenames)."""
-    text = SPACE_RE.sub(" ", SOUND_RE.sub(r"\1", strip_html_media(html))).strip()
+    text = strip_html_media(BLOCK_RE.sub(" ", html))
+    text = SPACE_RE.sub(" ", SOUND_RE.sub(r"\1", text)).strip()
     if limit and len(text) > limit:
         text = text[: limit - 1].rstrip() + "…"
     return text

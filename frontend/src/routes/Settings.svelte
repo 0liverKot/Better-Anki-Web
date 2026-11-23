@@ -211,6 +211,11 @@
       <span><kbd>Esc</kbd></span><span>Back to decks</span>
       <span><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span><span>Add card / save edit</span>
       <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd></span><span>Edit a field's HTML</span>
+      <span><kbd>Ctrl</kbd>+<kbd>,</kbd> / <kbd>Ctrl</kbd>+<kbd>.</kbd></span><span>Bullet list / numbered list</span>
+      <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>,</kbd> / <kbd>.</kbd></span><span>Outdent / indent a list item</span>
+      <span><kbd>Ctrl</kbd>+<kbd>M</kbd>, <kbd>M</kbd></span><span>MathJax inline <code>\(…\)</code></span>
+      <span><kbd>Ctrl</kbd>+<kbd>M</kbd>, <kbd>E</kbd></span><span>MathJax block <code>\[…\]</code></span>
+      <span><kbd>Ctrl</kbd>+<kbd>M</kbd>, <kbd>C</kbd></span><span>MathJax chemistry <code>\(\ce&#123;…&#125;\)</code></span>
       <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd></span><span>Cloze deletion (add <kbd>Alt</kbd> to reuse the number)</span>
     </div>
   </div>
@@ -308,6 +313,10 @@
     align-items: center;
     gap: 8px;
     font-weight: 600;
+  }
+  .shortcuts code {
+    font-size: 0.85em;
+    color: var(--muted);
   }
   kbd {
     display: inline-block;
