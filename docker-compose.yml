@@ -1,0 +1,36 @@
+# Runs the app behind Caddy, which gets an HTTPS certificate for $DOMAIN automatically.
+# Point your domain's DNS at this server, fill in .env, then: docker compose up -d
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      BAW_COOKIE_SECURE: "true"
+      # Only Caddy can reach the app, so trust its X-Forwarded-For (used for the
+      # login rate limit).
+      FORWARDED_ALLOW_IPS: "*"
+    volumes:
+      - baw_data:/data
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  baw_data: # your collection, media and AnkiWeb sync key
+  caddy_data:
+  caddy_config:

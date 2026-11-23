@@ -1,0 +1,9 @@
+# Pin anki exactly: its Python API changes between releases, and AnkiWeb
+# eventually rejects clients that are too old, so upgrade deliberately.
+anki==26.9.4
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+pydantic-settings==2.16.3
+itsdangerous==2.2.0
+bcrypt==5.0.0
+python-multipart==0.0.34
