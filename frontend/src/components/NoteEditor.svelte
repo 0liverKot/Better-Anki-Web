@@ -20,6 +20,7 @@
   import FieldEditor from './FieldEditor.svelte';
   import Icon from './Icon.svelte';
   import { api, ApiError, errorMessage } from '../lib/api';
+  import { createDeck } from '../lib/decks';
   import { toast } from '../lib/toast.svelte';
   import type { DeckName, Notetype } from '../lib/types';
 
@@ -230,6 +231,70 @@
   }
 
   const noFocusSteal = (e: MouseEvent) => e.preventDefault();
+
+  // Deck picker, with "New deck…" to create one without leaving the editor.
+
+  const NEW_DECK = '__new__';
+  let createdDecks = $state<DeckName[]>([]);
+  const deckOptions = $derived(
+    [...decks, ...createdDecks.filter((c) => !decks.some((d) => d.id === c.id))].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    ),
+  );
+  let namingDeck = $state(false);
+  let newDeckName = $state('');
+  let deckBusy = $state(false);
+  let deckError = $state<string | null>(null);
+  let deckNameInput: HTMLInputElement | undefined = $state();
+
+  async function onDeckChange(select: HTMLSelectElement): Promise<void> {
+    if (select.value === NEW_DECK) {
+      // Keep the current deck selected until the new one exists.
+      select.value = values.deckId === null ? '' : String(values.deckId);
+      namingDeck = true;
+      deckError = null;
+      await tick();
+      deckNameInput?.focus();
+      return;
+    }
+    values.deckId = select.value === '' ? null : Number(select.value);
+  }
+
+  function cancelNewDeck(): void {
+    namingDeck = false;
+    newDeckName = '';
+    deckError = null;
+  }
+
+  async function confirmNewDeck(): Promise<void> {
+    if (deckBusy || !newDeckName.trim()) return;
+    deckBusy = true;
+    deckError = null;
+    try {
+      const { deck, existed } = await createDeck(newDeckName);
+      if (!deckOptions.some((d) => d.id === deck.id)) createdDecks.push(deck);
+      values.deckId = deck.id;
+      cancelNewDeck();
+      toast(existed ? `"${deck.name}" already exists, so it's selected` : `Created deck "${deck.name}"`);
+    } catch (err) {
+      deckError = errorMessage(err);
+    } finally {
+      deckBusy = false;
+    }
+  }
+
+  function onDeckNameKeydown(event: KeyboardEvent): void {
+    // Handle Enter/Esc here so they don't add the note or close the editor.
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.stopPropagation();
+      confirmNewDeck();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelNewDeck();
+    }
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -250,16 +315,42 @@
     </label>
     <label class="picker">
       <span>Deck</span>
-      <select bind:value={values.deckId}>
+      <select
+        value={values.deckId === null ? '' : String(values.deckId)}
+        onchange={(e) => onDeckChange(e.currentTarget)}
+      >
         {#if mixedDeckLabel}
-          <option value={null}>{mixedDeckLabel}</option>
+          <option value="">{mixedDeckLabel}</option>
         {/if}
-        {#each decks as deck (deck.id)}
-          <option value={deck.id}>{deck.name}</option>
+        {#each deckOptions as deck (deck.id)}
+          <option value={String(deck.id)}>{deck.name}</option>
         {/each}
+        <option value={NEW_DECK}>＋ New deck…</option>
       </select>
     </label>
   </div>
+
+  {#if namingDeck}
+    <div class="new-deck">
+      <label class="field-label" for="{fieldIdPrefix}-new-deck">New deck</label>
+      <div class="new-deck-row">
+        <input
+          bind:this={deckNameInput}
+          id="{fieldIdPrefix}-new-deck"
+          type="text"
+          bind:value={newDeckName}
+          placeholder="Deck name, or Parent::Child for a subdeck"
+          autocomplete="off"
+          onkeydown={onDeckNameKeydown}
+        />
+        <button class="btn small primary" type="button" onclick={confirmNewDeck} disabled={deckBusy || !newDeckName.trim()}>
+          {deckBusy ? 'Creating…' : 'Create'}
+        </button>
+        <button class="btn small" type="button" onclick={cancelNewDeck}>Cancel</button>
+      </div>
+      {#if deckError}<p class="error-text">{deckError}</p>{/if}
+    </div>
+  {/if}
 
   <div class="toolbar" role="toolbar" aria-label="Formatting">
     <button type="button" onmousedown={noFocusSteal} onclick={() => format('bold')} title="Bold (Ctrl+B)"><b>B</b></button>
@@ -372,6 +463,26 @@
   .picker input:disabled {
     color: var(--muted);
     background: var(--surface-2);
+  }
+  .new-deck {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--accent-border);
+    border-radius: var(--radius);
+    background: var(--accent-soft);
+  }
+  .new-deck-row {
+    display: flex;
+    gap: 8px;
+  }
+  .new-deck-row input {
+    flex: 1;
+    min-width: 0;
+  }
+  .new-deck .error-text {
+    margin: 0;
   }
   .toolbar {
     display: flex;

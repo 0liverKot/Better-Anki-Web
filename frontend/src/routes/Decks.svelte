@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import DeckRow from '../components/DeckRow.svelte';
   import Icon from '../components/Icon.svelte';
   import { api, errorMessage } from '../lib/api';
+  import { createDeck } from '../lib/decks';
   import { onSynced, sync } from '../lib/sync.svelte';
   import { toast } from '../lib/toast.svelte';
   import type { DeckNode } from '../lib/types';
@@ -31,6 +32,53 @@
     } catch (err) {
       deck.collapsed = !deck.collapsed;
       toast(errorMessage(err), 'error');
+    }
+  }
+
+  // Creating a deck
+
+  let creating = $state(false);
+  let newName = $state('');
+  let createError = $state<string | null>(null);
+  let createBusy = $state(false);
+  let highlightId = $state<number | null>(null);
+  let nameInput: HTMLInputElement | undefined = $state();
+
+  async function openCreate(): Promise<void> {
+    creating = true;
+    createError = null;
+    await tick();
+    nameInput?.focus();
+  }
+
+  function closeCreate(): void {
+    creating = false;
+    newName = '';
+    createError = null;
+  }
+
+  async function submitCreate(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (createBusy) return;
+    createBusy = true;
+    createError = null;
+    try {
+      const { deck, existed } = await createDeck(newName);
+      if (existed) {
+        createError = `A deck called "${deck.name}" already exists.`;
+        return;
+      }
+      await load(); // (the server expands the parents of a new subdeck)
+      toast(`Created deck "${deck.name}"`);
+      closeCreate();
+      highlightId = deck.id;
+      setTimeout(() => {
+        if (highlightId === deck.id) highlightId = null;
+      }, 2500);
+    } catch (err) {
+      createError = errorMessage(err);
+    } finally {
+      createBusy = false;
     }
   }
 
@@ -83,7 +131,7 @@
     {:else}
       <ul>
         {#each decks as deck (deck.id)}
-          <DeckRow {deck} ontoggle={toggle} />
+          <DeckRow {deck} ontoggle={toggle} {highlightId} />
         {/each}
       </ul>
       <div class="total">
@@ -91,6 +139,39 @@
         <span class="num new">{totals.new}</span>
         <span class="num learn">{totals.learn}</span>
         <span class="num due">{totals.review}</span>
+      </div>
+    {/if}
+    {#if decks}
+      <div class="create">
+        {#if creating}
+          <form class="create-form" onsubmit={submitCreate}>
+            <label class="create-label" for="new-deck-name">New deck</label>
+            <div class="create-row">
+              <input
+                bind:this={nameInput}
+                id="new-deck-name"
+                type="text"
+                bind:value={newName}
+                placeholder="Deck name"
+                autocomplete="off"
+                onkeydown={(e) => e.key === 'Escape' && closeCreate()}
+              />
+              <button class="btn primary" type="submit" disabled={createBusy || !newName.trim()}>
+                {createBusy ? 'Creating…' : 'Create'}
+              </button>
+              <button class="btn" type="button" onclick={closeCreate}>Cancel</button>
+            </div>
+            {#if createError}
+              <p class="error-text">{createError}</p>
+            {:else}
+              <p class="hint muted">To make a subdeck, use <code>Parent::Child</code>, e.g. <code>Spanish::Verbs</code>.</p>
+            {/if}
+          </form>
+        {:else}
+          <button class="btn small" onclick={openCreate}>
+            <Icon name="plus" size={16} /> Create deck
+          </button>
+        {/if}
       </div>
     {/if}
   </div>
@@ -173,6 +254,50 @@
     margin: 0;
     padding: 24px 16px;
     border-top: 1px solid var(--border);
+  }
+  .create {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .create-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .create-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .create-row {
+    display: flex;
+    gap: 8px;
+  }
+  .create-row input {
+    flex: 1;
+    min-width: 0;
+  }
+  .hint {
+    margin: 0;
+    font-size: 0.85rem;
+  }
+  .hint code {
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: var(--surface-3);
+    color: var(--text);
+    font-size: 0.8rem;
+  }
+  @media (max-width: 480px) {
+    .create-row {
+      flex-wrap: wrap;
+    }
+    .create-row input {
+      flex-basis: 100%;
+    }
+    .create-row .btn {
+      flex: 1;
+    }
   }
   .new {
     color: var(--new);

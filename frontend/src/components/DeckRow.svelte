@@ -7,12 +7,14 @@
     deck: DeckNode;
     depth?: number;
     ontoggle: (deck: DeckNode) => void;
+    /** Briefly highlighted (e.g. a deck that was just created). */
+    highlightId?: number | null;
   }
-  let { deck, depth = 0, ontoggle }: Props = $props();
+  let { deck, depth = 0, ontoggle, highlightId = null }: Props = $props();
 </script>
 
 <li>
-  <div class="row" style="--depth: {depth}">
+  <div class="row" class:highlight={deck.id === highlightId} style="--depth: {depth}">
     {#if deck.children.length}
       <button
         class="toggle"
@@ -33,7 +35,7 @@
   {#if deck.children.length && !deck.collapsed}
     <ul>
       {#each deck.children as child (child.id)}
-        <DeckRow deck={child} depth={depth + 1} {ontoggle} />
+        <DeckRow deck={child} depth={depth + 1} {ontoggle} {highlightId} />
       {/each}
     </ul>
   {/if}
@@ -55,6 +57,18 @@
   }
   .row:hover {
     background: var(--surface-2);
+  }
+  .row.highlight {
+    animation: flash 2.5s ease-out;
+  }
+  @keyframes flash {
+    0%,
+    40% {
+      background: var(--accent-soft);
+    }
+    100% {
+      background: transparent;
+    }
   }
   .toggle {
     display: grid;

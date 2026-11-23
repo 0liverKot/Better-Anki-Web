@@ -30,6 +30,8 @@ desktop keep syncing with AnkiWeb as usual.
 ## Features
 
 - Deck list with new, learning and due counts, and collapsible subdecks
+- Create decks from the deck list, or with "New deck…" in the Add/Edit deck picker
+  (`Parent::Child` makes a subdeck)
 - Reviewer with Again/Hard/Good/Easy, next-interval labels, undo, and keyboard shortcuts
 - Cards render with your note types' own HTML, CSS and JavaScript, and support MathJax,
   images, audio/video (`[sound:...]`), text-to-speech tags and type-in-the-answer
