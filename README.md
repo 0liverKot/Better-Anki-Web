@@ -35,11 +35,14 @@ desktop keep syncing with AnkiWeb as usual.
   images, audio/video (`[sound:...]`), text-to-speech tags and type-in-the-answer
 - Add cards with any note type: cloze shortcut, paste/drop images and audio, tag suggestions,
   sticky fields, and duplicate warnings
+- Search your cards across all decks or one deck (subdecks included):
+  - Plain words match the front or back, with matches highlighted.
+  - Anki's search syntax also works (`"exact phrase"`, `-word`, `front:x`, `tag:x`, `is:due`).
+  - Click a result to preview its cards as they appear when reviewing.
 - Works well on phones, with light and dark mode
 - Single-user password login
 
-Not supported yet: image occlusion cards, browsing/editing existing notes, statistics, and deck
-options.
+Not supported yet: image occlusion cards, editing existing notes, statistics, and deck options.
 
 ## Run it locally
 

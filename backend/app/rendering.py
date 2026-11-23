@@ -51,6 +51,12 @@ class RenderedCard:
         text = _answer_type_filter(col, self.raw_answer, self.type_answer, typed)
         return _for_display(col, text, self.q_tags, self.a_tags)
 
+    def answer_for_preview(self, col: Collection) -> str:
+        """Answer side for browsing: shows the expected typed answer, no comparison."""
+        expected = self.type_answer.expected if self.type_answer else ""
+        text = TYPE_RE.sub(lambda _m: expected, self.raw_answer)
+        return _for_display(col, text, self.q_tags, self.a_tags)
+
 
 def render_card(col: Collection, card: Card) -> RenderedCard:
     out = card.render_output(reload=True)

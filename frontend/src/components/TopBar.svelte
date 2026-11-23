@@ -11,7 +11,17 @@
       <span>Better Anki</span>
     </a>
     <nav>
-      <a class="nav-link" class:active={router.route.name === 'decks'} href="#/">Decks</a>
+      <a class="nav-link decks-link" class:active={router.route.name === 'decks'} href="#/">Decks</a>
+      <a
+        class="nav-link search-link"
+        class:active={router.route.name === 'search'}
+        href="#/search"
+        aria-label="Search"
+        title="Search cards"
+      >
+        <Icon name="search" size={17} />
+        <span>Search</span>
+      </a>
       <a class="btn primary small" class:active={router.route.name === 'add'} href="#/add">
         <Icon name="plus" size={16} />
         <span>Add</span>
@@ -64,6 +74,9 @@
     gap: 8px;
   }
   .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     padding: 6px 10px;
     border-radius: 8px;
     color: var(--muted);
@@ -81,8 +94,12 @@
   }
   @media (max-width: 520px) {
     .brand span,
-    .nav-link {
+    .decks-link,
+    .search-link span {
       display: none;
+    }
+    nav {
+      gap: 6px;
     }
   }
 </style>

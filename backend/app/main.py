@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from .auth import Auth
 from .collection import CollectionManager, CollectionUnavailable
 from .config import Settings
-from .routes import auth, decks, media, notes, review, sync
+from .routes import auth, decks, media, notes, review, search, sync
 from .sync import SyncManager
 
 log = logging.getLogger(__name__)
@@ -70,7 +70,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     _install_error_handlers(app)
 
-    for module in (auth, sync, decks, review, notes, media):
+    for module in (auth, sync, decks, review, notes, search, media):
         app.include_router(module.router)
 
     _mount_frontend(app, settings)

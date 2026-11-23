@@ -76,3 +76,43 @@ export interface SyncStatus {
   media_error: string | null;
   local_changes: boolean;
 }
+
+export interface SearchNote {
+  id: number;
+  notetype: string;
+  fields: { name: string; text: string }[];
+  tags: string[];
+  decks: string[];
+  card_count: number;
+}
+
+export interface SearchResult {
+  query: string;
+  syntax_note: string | null;
+  total: number;
+  offset: number;
+  notes: SearchNote[];
+}
+
+export interface PreviewCard {
+  id: number;
+  ord: number;
+  name: string;
+  deck: string;
+  question: string;
+  answer: string;
+  css: string;
+  av: { q: AvTag[]; a: AvTag[] };
+  replay_question: boolean;
+  state: 'new' | 'learning' | 'review' | 'suspended' | 'buried' | 'preview' | 'unknown';
+  due_in_days: number | null;
+  interval_days: number | null;
+  reviews: number;
+  lapses: number;
+}
+
+export interface NoteDetail {
+  media_base: string;
+  note: { id: number; notetype: string; tags: string[]; fields: { name: string; text: string }[] };
+  cards: PreviewCard[];
+}

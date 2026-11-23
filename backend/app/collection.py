@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+import anki.lang
 from anki.collection import Collection
 
 
@@ -33,6 +34,10 @@ class CollectionManager:
 
     def open(self) -> None:
         with self.lock:
+            if anki.lang.current_i18n is None:
+                # Needed by anki.utils text helpers (e.g. strip_html_media); desktop does
+                # the same at startup.
+                anki.lang.set_lang("en_US")
             if self._col is None:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
                 self._col = Collection(str(self.path))

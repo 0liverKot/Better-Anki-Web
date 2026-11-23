@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import re
 import threading
 import time
@@ -14,6 +15,8 @@ from fastapi import HTTPException, Request, Response
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from .config import Settings
+
+log = logging.getLogger(__name__)
 
 COOKIE_NAME = "baw_session"
 # Every state-changing request must carry this header. Browsers won't let another site
@@ -41,6 +44,8 @@ class Auth:
                 "with $2b$). Generate one with `python -m app.hash_password`, or use "
                 "BAW_PASSWORD for a plain password."
             )
+        if settings.password_hash and settings.password:
+            log.warning("Both BAW_PASSWORD_HASH and BAW_PASSWORD are set; using BAW_PASSWORD_HASH.")
         self.settings = settings
         self.secret = settings.resolved_secret_key()
         self._serializer = URLSafeTimedSerializer(self.secret, salt="baw-session")

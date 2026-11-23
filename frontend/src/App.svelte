@@ -10,6 +10,7 @@
   import Decks from './routes/Decks.svelte';
   import Login from './routes/Login.svelte';
   import Review from './routes/Review.svelte';
+  import Search from './routes/Search.svelte';
   import Settings from './routes/Settings.svelte';
 
   let unreachable = $state(false);
@@ -45,6 +46,8 @@
     <TopBar />
     {#if router.route.name === 'add'}
       <Add />
+    {:else if router.route.name === 'search'}
+      <Search />
     {:else if router.route.name === 'settings'}
       <Settings />
     {:else}
