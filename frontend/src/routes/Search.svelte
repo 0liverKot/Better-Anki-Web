@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Icon from '../components/Icon.svelte';
+  import NoteEdit from '../components/NoteEdit.svelte';
   import NotePreview from '../components/NotePreview.svelte';
   import { api, errorMessage } from '../lib/api';
   import { onSynced } from '../lib/sync.svelte';
@@ -21,6 +22,7 @@
   let error = $state<string | null>(null);
   let openId = $state<number | null>(null);
   let detail = $state<NoteDetail | null>(null);
+  let editingId = $state<number | null>(null);
   let input: HTMLInputElement | undefined = $state();
   let seq = 0;
 
@@ -65,6 +67,7 @@
       usedPlainText = !!res.syntax_note;
       openId = null;
       detail = null;
+      editingId = null;
     } catch (err) {
       if (mine === seq) error = errorMessage(err);
     } finally {
@@ -88,18 +91,47 @@
 
   async function toggle(note: SearchNote): Promise<void> {
     if (openId === note.id) {
+      if (editingId === note.id && !confirm('Discard your changes to this note?')) return;
       openId = null;
       detail = null;
+      editingId = null;
       return;
     }
+    if (editingId !== null && !confirm('Discard your changes to the note you were editing?')) return;
     openId = note.id;
     detail = null;
+    editingId = null;
+    await loadDetail(note.id);
+  }
+
+  async function loadDetail(id: number): Promise<void> {
     try {
-      const res = await api<NoteDetail>(`/api/notes/${note.id}`);
-      if (openId === note.id) detail = res;
+      const res = await api<NoteDetail>(`/api/notes/${id}`);
+      if (openId === id) detail = res;
     } catch (err) {
       toast(errorMessage(err), 'error');
-      if (openId === note.id) openId = null;
+      if (openId === id) openId = null;
+    }
+  }
+
+  async function saved(note: SearchNote, result: { cards_moved: number }): Promise<void> {
+    editingId = null;
+    toast(result.cards_moved ? `Saved, and moved ${result.cards_moved} card${result.cards_moved === 1 ? '' : 's'}` : 'Saved');
+    detail = null;
+    await loadDetail(note.id);
+    // Show the new content in the result row too (it stays in the list even if it no
+    // longer matches the search, so it doesn't jump away while you're looking at it).
+    if (detail) {
+      const fresh = detail as NoteDetail;
+      const index = notes.findIndex((n) => n.id === note.id);
+      if (index >= 0) {
+        notes[index] = {
+          ...notes[index],
+          fields: fresh.note.fields,
+          tags: fresh.note.tags,
+          decks: [...new Set(fresh.cards.map((c) => c.deck))].sort(),
+        };
+      }
     }
   }
 
@@ -203,8 +235,15 @@
               <span class="chev"><Icon name={openId === note.id ? 'chevronDown' : 'chevronRight'} size={16} /></span>
             </button>
             {#if openId === note.id}
-              {#if detail}
-                <NotePreview {detail} />
+              {#if editingId === note.id}
+                <NoteEdit
+                  noteId={note.id}
+                  {decks}
+                  onsaved={(result) => saved(note, result)}
+                  oncancel={() => (editingId = null)}
+                />
+              {:else if detail}
+                <NotePreview {detail} onedit={detail.note.editable ? () => (editingId = note.id) : undefined} />
               {:else}
                 <p class="loading muted">Loading preview…</p>
               {/if}

@@ -39,10 +39,13 @@ desktop keep syncing with AnkiWeb as usual.
   - Plain words match the front or back, with matches highlighted.
   - Anki's search syntax also works (`"exact phrase"`, `-word`, `front:x`, `tag:x`, `is:due`).
   - Click a result to preview its cards as they appear when reviewing.
+  - Edit a note from its preview: fields, tags, and which deck its cards are in. Editing uses
+    the same editor as adding cards (`NoteEditor.svelte`), so editor features work in both.
 - Works well on phones, with light and dark mode
 - Single-user password login
 
-Not supported yet: image occlusion cards, editing existing notes, statistics, and deck options.
+Not supported yet: image occlusion cards (adding or editing), changing a note's type,
+statistics, and deck options.
 
 ## Run it locally
 
@@ -100,6 +103,9 @@ All settings are environment variables (or a `.env` file):
   in `data/sync_auth.json` (mode 600). "Disconnect" deletes it.
 - **Card scripts** run in a sandboxed iframe with no access to the app's cookies or API, so a
   shared deck's JavaScript can't act on your account.
+- **Editing fields with scripts:** a field containing scripts, embedded content or event
+  handlers opens as HTML source rather than in the rich editor, so its code never runs in the
+  app, and saving keeps it exactly as it was.
 - **Media URLs** carry a secret token, because the sandboxed card frame can't send cookies.
   Media is served with `Content-Security-Policy: sandbox`.
 - **Writes and logins:** every write needs a custom header (CSRF protection), and logins are

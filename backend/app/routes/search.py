@@ -18,6 +18,7 @@ from ..auth import require_user
 from ..collection import CollectionManager
 from ..deps import get_cm, media_base
 from ..rendering import render_card
+from .notes import is_editable
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_user)])
 
@@ -166,6 +167,7 @@ def note_detail(note_id: int, request: Request, cm: CollectionManager = Depends(
             "note": {
                 "id": note.id,
                 "notetype": notetype.get("name", ""),
+                "editable": is_editable(notetype),
                 "tags": note.tags,
                 "fields": [
                     {"name": field["name"], "text": _text(note.fields[i], limit=None)}

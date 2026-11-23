@@ -3,7 +3,7 @@
   import type { FrameOptions } from '../lib/cardFrame';
   import type { NoteDetail, PreviewCard } from '../lib/types';
 
-  let { detail }: { detail: NoteDetail } = $props();
+  let { detail, onedit }: { detail: NoteDetail; onedit?: () => void } = $props();
 
   let cardIndex = $state(0);
   let side = $state<'q' | 'a'>('q');
@@ -77,6 +77,9 @@
         <button class:active={side === 'q'} onclick={() => (side = 'q')}>Question</button>
         <button class:active={side === 'a'} onclick={() => (side = 'a')}>Answer</button>
       </div>
+      {#if onedit}
+        <button class="btn small edit-btn" onclick={onedit} title="Edit this note">Edit</button>
+      {/if}
       <div class="info">
         <span>{card.deck}</span>
         <span class="dot">·</span>
@@ -167,6 +170,10 @@
   .segmented button:last-child {
     margin-left: -1px;
     border-radius: 0 8px 8px 0;
+  }
+  .edit-btn {
+    order: 3;
+    margin-left: auto;
   }
   .info {
     display: flex;

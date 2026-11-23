@@ -113,6 +113,18 @@ export interface PreviewCard {
 
 export interface NoteDetail {
   media_base: string;
-  note: { id: number; notetype: string; tags: string[]; fields: { name: string; text: string }[] };
+  note: { id: number; notetype: string; editable: boolean; tags: string[]; fields: { name: string; text: string }[] };
   cards: PreviewCard[];
+}
+
+export interface NoteEditData {
+  id: number;
+  version: string;
+  notetype: Notetype;
+  /** null when the note's cards are spread over several decks */
+  deck_id: number | null;
+  deck_names: string[];
+  fields: string[];
+  tags: string;
+  media_base: string;
 }

@@ -209,7 +209,8 @@
       <span><kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Z</kbd></span><span>Undo</span>
       <span><kbd>R</kbd></span><span>Replay audio</span>
       <span><kbd>Esc</kbd></span><span>Back to decks</span>
-      <span><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span><span>Add card</span>
+      <span><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span><span>Add card / save edit</span>
+      <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd></span><span>Edit a field's HTML</span>
       <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd></span><span>Cloze deletion (add <kbd>Alt</kbd> to reuse the number)</span>
     </div>
   </div>
