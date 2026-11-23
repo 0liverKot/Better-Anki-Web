@@ -1,5 +1,5 @@
 import { api, ApiError } from './api';
-import type { DeckName } from './types';
+import type { DeckInfo, DeckName } from './types';
 
 /**
  * Create a deck ("Parent::Child" makes a subdeck). If a deck with that name already
@@ -14,4 +14,18 @@ export async function createDeck(name: string): Promise<{ deck: DeckName; existe
     }
     throw err;
   }
+}
+
+/** Rename a deck; "Parent::Child" moves it (with its subdecks) under Parent. */
+export function renameDeck(id: number, name: string): Promise<DeckName> {
+  return api<DeckName>(`/api/decks/${id}`, { method: 'PUT', body: { name } });
+}
+
+export function deckInfo(id: number): Promise<DeckInfo> {
+  return api<DeckInfo>(`/api/decks/${id}`);
+}
+
+/** Delete a deck with its subdecks and cards (a filtered deck's cards go back home). */
+export function deleteDeck(id: number): Promise<{ name: string; cards_deleted: number }> {
+  return api(`/api/decks/${id}`, { method: 'DELETE' });
 }

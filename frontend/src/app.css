@@ -189,6 +189,22 @@ select:focus {
   }
 }
 
+.btn.danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn.danger:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+@media (prefers-color-scheme: dark) {
+  .btn.danger {
+    color: #1d0f15;
+  }
+}
+
 .btn.small {
   min-height: 34px;
   padding: 0 12px;

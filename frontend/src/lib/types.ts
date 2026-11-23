@@ -1,12 +1,23 @@
 export interface DeckNode {
   id: number;
+  /** Last part of the name ("Verbs" for "Spanish::Verbs"). */
   name: string;
+  full_name: string;
   new: number;
   learn: number;
   review: number;
   collapsed: boolean;
   filtered: boolean;
   children: DeckNode[];
+}
+
+/** What deleting a deck would remove. */
+export interface DeckInfo {
+  id: number;
+  name: string;
+  filtered: boolean;
+  subdecks: number;
+  cards: number;
 }
 
 export interface AvTag {

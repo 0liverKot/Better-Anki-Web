@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import DeckRow from '../components/DeckRow.svelte';
+  import ConfirmDialog from '../components/ConfirmDialog.svelte';
+  import DeckRow, { type DeckActions } from '../components/DeckRow.svelte';
   import Icon from '../components/Icon.svelte';
   import { api, errorMessage } from '../lib/api';
-  import { createDeck } from '../lib/decks';
+  import { createDeck, deckInfo, deleteDeck, renameDeck } from '../lib/decks';
   import { onSynced, sync } from '../lib/sync.svelte';
   import { toast } from '../lib/toast.svelte';
-  import type { DeckNode } from '../lib/types';
+  import type { DeckInfo, DeckNode } from '../lib/types';
 
   let decks = $state<DeckNode[] | null>(null);
   let error = $state<string | null>(null);
@@ -71,16 +72,107 @@
       await load(); // (the server expands the parents of a new subdeck)
       toast(`Created deck "${deck.name}"`);
       closeCreate();
-      highlightId = deck.id;
-      setTimeout(() => {
-        if (highlightId === deck.id) highlightId = null;
-      }, 2500);
+      flash(deck.id);
     } catch (err) {
       createError = errorMessage(err);
     } finally {
       createBusy = false;
     }
   }
+
+  async function flash(id: number): Promise<void> {
+    highlightId = null; // (restarts the animation if it's the same row again)
+    await tick();
+    highlightId = id;
+    setTimeout(() => {
+      if (highlightId === id) highlightId = null;
+    }, 2500);
+  }
+
+  // Renaming (inline, in the deck's row)
+
+  let renamingId = $state<number | null>(null);
+
+  async function rename(deck: DeckNode, name: string): Promise<string | null> {
+    if (name.trim() === deck.full_name) {
+      renamingId = null;
+      return null;
+    }
+    try {
+      const renamed = await renameDeck(deck.id, name);
+      await load(); // (the server expands the new parents of a moved deck)
+      renamingId = null;
+      toast(`Renamed to "${renamed.name}"`);
+      flash(deck.id);
+      return null;
+    } catch (err) {
+      return errorMessage(err);
+    }
+  }
+
+  // Deleting (after confirming)
+
+  let deleting = $state<DeckNode | null>(null);
+  let deleteInfo = $state<DeckInfo | null>(null);
+  let deleteError = $state<string | null>(null);
+  let deleteBusy = $state(false);
+
+  async function askDelete(deck: DeckNode): Promise<void> {
+    deleting = deck;
+    deleteInfo = null;
+    deleteError = null;
+    try {
+      const info = await deckInfo(deck.id);
+      if (deleting === deck) deleteInfo = info;
+    } catch (err) {
+      if (deleting === deck) deleteError = errorMessage(err);
+    }
+  }
+
+  function closeDelete(): void {
+    if (deleteBusy) return;
+    deleting = null;
+  }
+
+  async function confirmDelete(): Promise<void> {
+    if (!deleting || !deleteInfo || deleteBusy) return;
+    const deck = deleting;
+    deleteBusy = true;
+    try {
+      const result = await deleteDeck(deck.id);
+      deleteBusy = false;
+      deleting = null;
+      const cards = result.cards_deleted;
+      toast(`Deleted "${result.name}"` + (cards ? ` and ${plural(cards, 'card')}` : ''));
+      await load();
+      // (it may have been renaming the deleted deck or one of its subdecks)
+      if (renamingId !== null && !findDeck(decks ?? [], renamingId)) renamingId = null;
+    } catch (err) {
+      deleteBusy = false;
+      deleteError = errorMessage(err);
+    }
+  }
+
+  function findDeck(list: DeckNode[], id: number): DeckNode | null {
+    for (const deck of list) {
+      if (deck.id === id) return deck;
+      const found = findDeck(deck.children, id);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function plural(n: number, word: string): string {
+    return `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
+  }
+
+  const actions: DeckActions = {
+    toggle,
+    startRename: (deck) => (renamingId = deck.id),
+    cancelRename: () => (renamingId = null),
+    rename,
+    remove: askDelete,
+  };
 
   const status = $derived(sync.status);
   const totals = $derived(
@@ -121,6 +213,7 @@
       <span class="num-head new" title="New cards">New</span>
       <span class="num-head learn" title="Learning">Learn</span>
       <span class="num-head due" title="Due for review">Due</span>
+      <span></span>
     </div>
     {#if error}
       <p class="empty">{error} <button class="link" onclick={load}>Retry</button></p>
@@ -131,7 +224,7 @@
     {:else}
       <ul>
         {#each decks as deck (deck.id)}
-          <DeckRow {deck} ontoggle={toggle} {highlightId} />
+          <DeckRow {deck} {actions} {renamingId} {highlightId} />
         {/each}
       </ul>
       <div class="total">
@@ -139,6 +232,7 @@
         <span class="num new">{totals.new}</span>
         <span class="num learn">{totals.learn}</span>
         <span class="num due">{totals.review}</span>
+        <span></span>
       </div>
     {/if}
     {#if decks}
@@ -177,9 +271,51 @@
   </div>
 </section>
 
+<ConfirmDialog
+  open={deleting !== null}
+  title={deleting ? `Delete "${deleting.full_name}"?` : ''}
+  confirmLabel={deleteBusy ? 'Deleting…' : 'Delete deck'}
+  danger
+  disabled={!deleteInfo || deleteBusy}
+  onconfirm={confirmDelete}
+  oncancel={closeDelete}
+>
+  {#if deleteInfo?.filtered}
+    <p>
+      It's a filtered deck, so no cards are deleted: its {plural(deleteInfo.cards, 'card')}
+      {deleteInfo.cards === 1 ? 'goes' : 'go'} back to {deleteInfo.cards === 1 ? 'its' : 'their'} original
+      {deleteInfo.cards === 1 ? 'deck' : 'decks'}.
+    </p>
+  {:else if deleteInfo}
+    {@const subdecks = plural(deleteInfo.subdecks, 'subdeck')}
+    {@const cards = plural(deleteInfo.cards, 'card')}
+    {@const their = deleteInfo.cards === 1 ? 'its' : 'their'}
+    <p>
+      {#if deleteInfo.subdecks && deleteInfo.cards}
+        This deletes the deck, its <strong>{subdecks}</strong> and <strong>{cards}</strong>, including {their} review history.
+      {:else if deleteInfo.cards}
+        This deletes the deck and its <strong>{cards}</strong>, including {their} review history.
+      {:else if deleteInfo.subdecks}
+        This deletes the deck and its <strong>{subdecks}</strong>. There are no cards in them.
+      {:else}
+        This deletes the deck. There are no cards in it.
+      {/if}
+    </p>
+    <p class="muted">It's also deleted on your other devices when they next sync.</p>
+  {:else if !deleteError}
+    <p class="muted">Checking what's in this deck…</p>
+  {/if}
+  {#if deleteError}
+    <p class="error-text">{deleteError}</p>
+  {/if}
+</ConfirmDialog>
+
 <style>
   .page {
     --num-col: 3.6em;
+    --action-size: 32px;
+    --actions-col: calc(var(--action-size) * 2 + 10px);
+    --row-pad-right: 8px;
     max-width: 760px;
     margin: 0 auto;
     padding: 20px 16px 48px;
@@ -213,9 +349,9 @@
   .head,
   .total {
     display: grid;
-    grid-template-columns: 1fr var(--num-col) var(--num-col) var(--num-col);
+    grid-template-columns: 1fr var(--num-col) var(--num-col) var(--num-col) var(--actions-col);
     align-items: center;
-    padding: 0 16px 0 16px;
+    padding: 0 var(--row-pad-right) 0 16px;
   }
   .head {
     padding-top: 14px;
@@ -289,6 +425,16 @@
     font-size: 0.8rem;
   }
   @media (max-width: 480px) {
+    .page {
+      --num-col: 2.9em;
+      --action-size: 30px;
+      --actions-col: calc(var(--action-size) * 2 + 6px);
+      --row-pad-right: 4px;
+    }
+    .num-head {
+      font-size: 0.72rem;
+      letter-spacing: 0;
+    }
     .create-row {
       flex-wrap: wrap;
     }
@@ -297,6 +443,17 @@
     }
     .create-row .btn {
       flex: 1;
+    }
+  }
+  @media (max-width: 360px) {
+    .page {
+      --num-col: 2.4em;
+      --action-size: 28px;
+      --actions-col: calc(var(--action-size) * 2 + 4px);
+      --indent: 12px;
+    }
+    .num-head {
+      font-size: 0.64rem;
     }
   }
   .new {

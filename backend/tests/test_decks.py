@@ -57,3 +57,147 @@ def test_new_deck_can_receive_cards(client: Client) -> None:
     assert res.status_code == 200
     tree = client.get("/api/decks").json()["decks"]
     assert next(d for d in tree if d["id"] == deck["id"])["new"] == 1
+
+
+# Renaming and deleting
+##########################################################################
+
+
+def _tree(client: Client) -> list[dict]:
+    return client.get("/api/decks").json()["decks"]
+
+
+def _find(decks: list[dict], full_name: str) -> dict | None:
+    for deck in decks:
+        if deck["full_name"] == full_name:
+            return deck
+        if found := _find(deck["children"], full_name):
+            return found
+    return None
+
+
+def _add_card(client: Client, deck_id: int, front: str) -> None:
+    types = {t["name"]: t["id"] for t in client.get("/api/notetypes").json()}
+    res = client.post(
+        "/api/notes", json={"notetype_id": types["Basic"], "deck_id": deck_id, "fields": [front, "x"]}
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_tree_has_full_names(client: Client) -> None:
+    client.post("/api/decks", json={"name": "Languages::French::Verbs"})
+    verbs = _find(_tree(client), "Languages::French::Verbs")
+    assert verbs and verbs["name"] == "Verbs"
+
+
+def test_rename_deck_keeps_cards_and_subdecks(client: Client) -> None:
+    deck = client.post("/api/decks", json={"name": "Spansh"}).json()
+    sub = client.post("/api/decks", json={"name": "Spansh::Verbs"}).json()
+    _add_card(client, deck["id"], "hola")
+    res = client.put(f"/api/decks/{deck['id']}", json={"name": "  Spanish "})
+    assert res.status_code == 200, res.text
+    assert res.json() == {"id": deck["id"], "name": "Spanish"}
+    tree = _tree(client)
+    assert _find(tree, "Spansh") is None
+    assert _find(tree, "Spanish")["new"] == 1
+    assert _find(tree, "Spanish::Verbs")["id"] == sub["id"]
+
+
+def test_rename_can_move_deck_under_a_parent(client: Client) -> None:
+    deck = client.post("/api/decks", json={"name": "Verbs"}).json()
+    parent = client.post("/api/decks", json={"name": "German"}).json()
+    client.post(f"/api/decks/{parent['id']}/collapse", json={"collapsed": True})
+    res = client.put(f"/api/decks/{deck['id']}", json={"name": "German :: Verbs"})
+    assert res.json()["name"] == "German::Verbs"
+    german = _find(_tree(client), "German")
+    assert german["collapsed"] is False  # opened so the moved deck is visible
+    assert [c["id"] for c in german["children"]] == [deck["id"]]
+    # A brand-new parent is created too.
+    client.put(f"/api/decks/{deck['id']}", json={"name": "Languages::German::Verbs"})
+    assert _find(_tree(client), "Languages::German::Verbs")["id"] == deck["id"]
+
+
+def test_rename_conflicts_and_case_change(client: Client) -> None:
+    taken = client.post("/api/decks", json={"name": "Maths"}).json()
+    deck = client.post("/api/decks", json={"name": "physics"}).json()
+    res = client.put(f"/api/decks/{deck['id']}", json={"name": "maths"})
+    assert res.status_code == 409  # Anki itself would quietly rename it to "maths+"
+    assert res.json()["id"] == taken["id"]
+    assert client.put(f"/api/decks/{deck['id']}", json={"name": "Physics"}).json()["name"] == "Physics"
+    unchanged = client.put(f"/api/decks/{deck['id']}", json={"name": "Physics"})
+    assert unchanged.status_code == 200 and unchanged.json()["name"] == "Physics"
+
+
+def test_rename_rejects_bad_names(client: Client) -> None:
+    deck = client.post("/api/decks", json={"name": "Topic"}).json()
+    client.post("/api/decks", json={"name": "Topic::Sub"})
+    for name in ["", "  ", "A::::B", "Trail::"]:
+        assert client.put(f"/api/decks/{deck['id']}", json={"name": name}).status_code == 400, name
+    inside = client.put(f"/api/decks/{deck['id']}", json={"name": "topic::Sub::Topic"})
+    assert inside.status_code == 400 and "inside" in inside.json()["detail"]
+    assert client.put("/api/decks/999999", json={"name": "X"}).status_code == 404
+    assert _find(_tree(client), "Topic::Sub")
+
+
+def test_delete_deck_removes_subdecks_and_cards(client: Client) -> None:
+    deck = client.post("/api/decks", json={"name": "History"}).json()
+    sub = client.post("/api/decks", json={"name": "History::Rome"}).json()
+    keep = client.post("/api/decks", json={"name": "Keep"}).json()
+    _add_card(client, deck["id"], "1066")
+    _add_card(client, sub["id"], "753 BC")
+    _add_card(client, keep["id"], "stays")
+
+    info = client.get(f"/api/decks/{deck['id']}").json()
+    assert info == {"id": deck["id"], "name": "History", "filtered": False, "subdecks": 1, "cards": 2}
+
+    res = client.delete(f"/api/decks/{deck['id']}")
+    assert res.status_code == 200, res.text
+    assert res.json()["cards_deleted"] == 2
+    tree = _tree(client)
+    assert _find(tree, "History") is None and _find(tree, "History::Rome") is None
+    assert _find(tree, "Keep")["new"] == 1
+    assert client.get("/api/search", params={"q": "1066"}).json()["notes"] == []
+    assert len(client.get("/api/search", params={"q": "stays"}).json()["notes"]) == 1
+    assert client.delete(f"/api/decks/{deck['id']}").status_code == 404
+    assert client.get(f"/api/decks/{deck['id']}").status_code == 404
+
+
+def test_deleting_the_last_used_deck_for_adding(client: Client) -> None:
+    deck = client.post("/api/decks", json={"name": "Temp"}).json()
+    _add_card(client, deck["id"], "temp card")  # makes it the deck new cards default to
+    client.delete(f"/api/decks/{deck['id']}")
+    fallback = client.get("/api/add/defaults").json()["deck_id"]
+    assert fallback != deck["id"]
+    assert any(d["id"] == fallback for d in client.get("/api/decks/names").json())
+
+
+def test_delete_and_rename_need_csrf_header(client: Client) -> None:
+    deck = client.post("/api/decks", json={"name": "Guarded"}).json()
+    headers = {"X-Requested-With": ""}
+    assert client.delete(f"/api/decks/{deck['id']}", headers=headers).status_code == 403
+    assert client.put(f"/api/decks/{deck['id']}", json={"name": "X"}, headers=headers).status_code == 403
+    assert _find(_tree(client), "Guarded")
+
+
+def test_filtered_decks_rename_and_delete(client: Client) -> None:
+    home = client.post("/api/decks", json={"name": "Home"}).json()
+    for i in range(3):
+        _add_card(client, home["id"], f"card {i}")
+    with client.app.state.cm.use() as col:  # type: ignore[attr-defined]
+        filtered = col.sched.get_or_create_filtered_deck(deck_id=0)
+        filtered.name = "Cram"
+        filtered.config.search_terms[0].search = "deck:Home"
+        cram_id = col.sched.add_or_update_filtered_deck(filtered).id
+
+    info = client.get(f"/api/decks/{cram_id}").json()
+    assert info["filtered"] is True and info["cards"] == 3
+    # A filtered deck can't hold subdecks.
+    res = client.put(f"/api/decks/{home['id']}", json={"name": "Cram::Home"})
+    assert res.status_code == 400 and "Filtered" in res.json()["detail"]
+    assert client.put(f"/api/decks/{cram_id}", json={"name": "Cram now"}).json()["name"] == "Cram now"
+
+    # Deleting it sends the cards back home rather than deleting them.
+    assert client.delete(f"/api/decks/{cram_id}").json()["cards_deleted"] == 0
+    tree = _tree(client)
+    assert _find(tree, "Cram now") is None
+    assert _find(tree, "Home")["new"] == 3
