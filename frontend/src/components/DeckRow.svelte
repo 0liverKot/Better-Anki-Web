@@ -24,8 +24,19 @@
     renamingId?: number | null;
     /** Briefly highlighted (e.g. a deck that was just created). */
     highlightId?: number | null;
+    /** The deck being dragged, and the deck it would be dropped into. */
+    dragSourceId?: number | null;
+    dropTargetId?: number | null;
   }
-  let { deck, depth = 0, actions, renamingId = null, highlightId = null }: Props = $props();
+  let {
+    deck,
+    depth = 0,
+    actions,
+    renamingId = null,
+    highlightId = null,
+    dragSourceId = null,
+    dropTargetId = null,
+  }: Props = $props();
 
   const renaming = $derived(deck.id === renamingId);
   let draft = $state('');
@@ -66,8 +77,15 @@
   }
 </script>
 
-<li>
-  <div class="row" class:highlight={deck.id === highlightId} class:renaming style="--depth: {depth}">
+<li class:dragging={deck.id === dragSourceId}>
+  <div
+    class="row"
+    class:highlight={deck.id === highlightId}
+    class:renaming
+    class:drop-target={deck.id === dropTargetId}
+    data-deck-id={deck.id}
+    style="--depth: {depth}"
+  >
     {#if deck.children.length}
       <button
         class="toggle"
@@ -106,7 +124,8 @@
         {/if}
       </form>
     {:else}
-      <a class="name" class:filtered={deck.filtered} href="#/review/{deck.id}">{deck.name}</a>
+      <!-- (draggable=false: rows are dragged with pointer events, not as links) -->
+      <a class="name" class:filtered={deck.filtered} href="#/review/{deck.id}" draggable="false">{deck.name}</a>
       <span class="num new" class:zero={!deck.new}>{deck.new}</span>
       <span class="num learn" class:zero={!deck.learn}>{deck.learn}</span>
       <span class="num due" class:zero={!deck.review}>{deck.review}</span>
@@ -133,7 +152,7 @@
   {#if deck.children.length && !deck.collapsed}
     <ul>
       {#each deck.children as child (child.id)}
-        <DeckRow deck={child} depth={depth + 1} {actions} {renamingId} {highlightId} />
+        <DeckRow deck={child} depth={depth + 1} {actions} {renamingId} {highlightId} {dragSourceId} {dropTargetId} />
       {/each}
     </ul>
   {/if}
@@ -155,6 +174,29 @@
   }
   .row:hover:not(.renaming) {
     background: var(--surface-2);
+  }
+  .row {
+    /* Rows can be dragged (pointer events): no text selection, and no link
+       preview or menu on a long press. */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  @media (hover: hover) {
+    .row:not(.renaming) {
+      cursor: grab;
+    }
+  }
+  :global(body.deck-dragging) .row:hover:not(.drop-target) {
+    background: none; /* only rows it can be dropped into light up */
+  }
+  .dragging {
+    opacity: 0.45;
+  }
+  .row.drop-target,
+  .row.drop-target:hover {
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 2px var(--accent);
   }
   .row.renaming {
     align-items: start;

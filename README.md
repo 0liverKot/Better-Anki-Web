@@ -35,6 +35,8 @@ desktop keep syncing with AnkiWeb as usual.
 - Rename or delete a deck with the buttons on the right of its row. Renaming to
   `Parent::Name` moves it (and its subdecks) under another deck; deleting asks first
   and shows how many subdecks and cards will go
+- Drag a deck onto another to make it a subdeck (on touch screens: press and hold, then
+  drag), or onto the deck list's header to make it a top-level deck again
 - Reviewer with Again/Hard/Good/Easy, next-interval labels, undo, and keyboard shortcuts
 - Cards render with your note types' own HTML, CSS and JavaScript, and support MathJax,
   images, audio/video (`[sound:...]`), text-to-speech tags and type-in-the-answer

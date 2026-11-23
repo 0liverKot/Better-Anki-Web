@@ -4,7 +4,8 @@
   import DeckRow, { type DeckActions } from '../components/DeckRow.svelte';
   import Icon from '../components/Icon.svelte';
   import { api, errorMessage } from '../lib/api';
-  import { createDeck, deckInfo, deleteDeck, renameDeck } from '../lib/decks';
+  import { DeckDrag } from '../lib/deckDrag.svelte';
+  import { createDeck, deckInfo, deleteDeck, moveDeck, renameDeck } from '../lib/decks';
   import { onSynced, sync } from '../lib/sync.svelte';
   import { toast } from '../lib/toast.svelte';
   import type { DeckInfo, DeckNode } from '../lib/types';
@@ -23,7 +24,11 @@
 
   onMount(() => {
     load();
-    return onSynced(load);
+    const off = onSynced(load);
+    return () => {
+      off();
+      deckDrag.destroy();
+    };
   });
 
   async function toggle(deck: DeckNode): Promise<void> {
@@ -166,6 +171,44 @@
     return `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
   }
 
+  // Moving a deck by dragging it onto another one (or onto the header: top level)
+
+  function parentName(deck: DeckNode): string | null {
+    const cut = deck.full_name.lastIndexOf('::');
+    return cut < 0 ? null : deck.full_name.slice(0, cut);
+  }
+
+  function canDrop(source: DeckNode, target: number | 'root'): boolean {
+    if (target === 'root') return parentName(source) !== null;
+    const deck = findDeck(decks ?? [], target);
+    if (!deck || deck.id === source.id || deck.filtered) return false; // filtered decks can't have subdecks
+    const into = deck.full_name.toLowerCase();
+    const from = source.full_name.toLowerCase();
+    if (into.startsWith(from + '::')) return false; // one of its own subdecks
+    return parentName(source)?.toLowerCase() !== into; // (already in it)
+  }
+
+  async function drop(source: DeckNode, target: number | 'root'): Promise<void> {
+    const parent = target === 'root' ? null : findDeck(decks ?? [], target);
+    try {
+      await moveDeck(source.id, parent?.id ?? null);
+      await load(); // (the server expands the deck it was moved into)
+      toast(parent ? `Moved "${source.name}" into "${parent.full_name}"` : `Moved "${source.name}" to the top level`);
+      flash(source.id);
+    } catch (err) {
+      toast(errorMessage(err), 'error', 4000);
+    }
+  }
+
+  const deckDrag = new DeckDrag({ find: (id) => findDeck(decks ?? [], id), canDrop, ondrop: drop });
+  const rootDroppable = $derived(deckDrag.source !== null && parentName(deckDrag.source) !== null);
+  const dropLabel = $derived.by(() => {
+    const target = deckDrag.target;
+    if (target === 'root') return 'Move to the top level';
+    if (target === null) return null;
+    return `Move into "${findDeck(decks ?? [], target)?.name ?? ''}"`;
+  });
+
   const actions: DeckActions = {
     toggle,
     startRename: (deck) => (renamingId = deck.id),
@@ -208,12 +251,16 @@
   {/if}
 
   <div class="panel">
-    <div class="head">
-      <h1>Decks</h1>
-      <span class="num-head new" title="New cards">New</span>
-      <span class="num-head learn" title="Learning">Learn</span>
-      <span class="num-head due" title="Due for review">Due</span>
-      <span></span>
+    <div class="head" data-drop-root class:root-zone={rootDroppable} class:drop-target={deckDrag.target === 'root'}>
+      {#if rootDroppable}
+        <span class="root-hint">Drop here to make it a top-level deck</span>
+      {:else}
+        <h1>Decks</h1>
+        <span class="num-head new" title="New cards">New</span>
+        <span class="num-head learn" title="Learning">Learn</span>
+        <span class="num-head due" title="Due for review">Due</span>
+        <span></span>
+      {/if}
     </div>
     {#if error}
       <p class="empty">{error} <button class="link" onclick={load}>Retry</button></p>
@@ -222,9 +269,16 @@
     {:else if decks.length === 0}
       <p class="empty muted">No decks yet.</p>
     {:else}
-      <ul>
+      <ul onpointerdown={deckDrag.pointerdown}>
         {#each decks as deck (deck.id)}
-          <DeckRow {deck} {actions} {renamingId} {highlightId} />
+          <DeckRow
+            {deck}
+            {actions}
+            {renamingId}
+            {highlightId}
+            dragSourceId={deckDrag.source?.id ?? null}
+            dropTargetId={typeof deckDrag.target === 'number' ? deckDrag.target : null}
+          />
         {/each}
       </ul>
       <div class="total">
@@ -265,11 +319,24 @@
           <button class="btn small" onclick={openCreate}>
             <Icon name="plus" size={16} /> Create deck
           </button>
+          {#if decks.length}
+            <p class="drag-tip muted">
+              <span class="tip-mouse">Tip: drag a deck onto another to make it a subdeck.</span>
+              <span class="tip-touch">Tip: press and hold a deck, then drag it onto another to make it a subdeck.</span>
+            </p>
+          {/if}
         {/if}
       </div>
     {/if}
   </div>
 </section>
+
+{#if deckDrag.source}
+  <div class="drag-ghost" class:touch={deckDrag.touch} style="left: {deckDrag.x}px; top: {deckDrag.y}px" aria-hidden="true">
+    <strong>{deckDrag.source.name}</strong>
+    {#if dropLabel}<span>{dropLabel}</span>{/if}
+  </div>
+{/if}
 
 <ConfirmDialog
   open={deleting !== null}
@@ -354,8 +421,71 @@
     padding: 0 var(--row-pad-right) 0 16px;
   }
   .head {
+    min-height: 52px; /* same height when it turns into the drop zone */
     padding-top: 14px;
     padding-bottom: 10px;
+  }
+  .head.root-zone {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .root-hint {
+    grid-column: 1 / -1;
+    display: grid;
+    place-items: center;
+    min-height: 40px;
+    margin-right: 8px;
+    border: 2px dashed var(--border-strong);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+  .head.drop-target .root-hint {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .drag-ghost {
+    position: fixed;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-width: 260px;
+    padding: 7px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    font-size: 0.9rem;
+    pointer-events: none;
+    transform: translate(14px, 14px);
+    overflow-wrap: anywhere;
+  }
+  .drag-ghost.touch {
+    /* above the finger, so it isn't hidden under it */
+    transform: translate(-50%, calc(-100% - 28px));
+  }
+  .drag-ghost span {
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .drag-tip {
+    margin: 0;
+    font-size: 0.85rem;
+  }
+  .tip-touch {
+    display: none;
+  }
+  @media (pointer: coarse) {
+    .tip-mouse {
+      display: none;
+    }
+    .tip-touch {
+      display: inline;
+    }
   }
   h1 {
     margin: 0;
@@ -392,8 +522,15 @@
     border-top: 1px solid var(--border);
   }
   .create {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
     padding: 12px 16px;
     border-top: 1px solid var(--border);
+  }
+  .create-form {
+    flex: 1;
   }
   .create-form {
     display: flex;

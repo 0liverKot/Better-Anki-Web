@@ -96,7 +96,7 @@ def test_rename_deck_keeps_cards_and_subdecks(client: Client) -> None:
     _add_card(client, deck["id"], "hola")
     res = client.put(f"/api/decks/{deck['id']}", json={"name": "  Spanish "})
     assert res.status_code == 200, res.text
-    assert res.json() == {"id": deck["id"], "name": "Spanish"}
+    assert res.json() == {"id": deck["id"], "name": "Spanish", "changed": True}
     tree = _tree(client)
     assert _find(tree, "Spansh") is None
     assert _find(tree, "Spanish")["new"] == 1
@@ -201,3 +201,68 @@ def test_filtered_decks_rename_and_delete(client: Client) -> None:
     tree = _tree(client)
     assert _find(tree, "Cram now") is None
     assert _find(tree, "Home")["new"] == 3
+
+
+# Moving (drag and drop)
+##########################################################################
+
+
+def _move(client: Client, deck_id: int, parent_id: int | None):  # type: ignore[no-untyped-def]
+    return client.post(f"/api/decks/{deck_id}/move", json={"parent_id": parent_id})
+
+
+def test_move_deck_into_another(client: Client) -> None:
+    verbs = client.post("/api/decks", json={"name": "Verbs"}).json()
+    irregular = client.post("/api/decks", json={"name": "Verbs::Irregular"}).json()
+    _add_card(client, irregular["id"], "ser")
+    spanish = client.post("/api/decks", json={"name": "Spanish"}).json()
+    client.post(f"/api/decks/{spanish['id']}/collapse", json={"collapsed": True})
+
+    res = _move(client, verbs["id"], spanish["id"])
+    assert res.status_code == 200, res.text
+    assert res.json() == {"id": verbs["id"], "name": "Spanish::Verbs", "changed": True}
+    tree = _tree(client)
+    assert _find(tree, "Spanish")["collapsed"] is False  # opened so the moved deck shows
+    assert _find(tree, "Spanish::Verbs::Irregular")["id"] == irregular["id"]
+    assert _find(tree, "Spanish::Verbs::Irregular")["new"] == 1
+    assert _find(tree, "Verbs") is None
+
+    # Dropping it on the deck it's already in changes nothing.
+    again = _move(client, verbs["id"], spanish["id"])
+    assert again.status_code == 200 and again.json()["changed"] is False
+
+
+def test_move_deck_to_top_level(client: Client) -> None:
+    deep = client.post("/api/decks", json={"name": "A::B::Deep"}).json()
+    res = _move(client, deep["id"], None)
+    assert res.json()["name"] == "Deep"
+    tree = _tree(client)
+    assert _find(tree, "Deep")["id"] == deep["id"] and _find(tree, "A::B")
+    assert _move(client, deep["id"], None).json()["changed"] is False
+
+
+def test_move_rejections(client: Client) -> None:
+    top = client.post("/api/decks", json={"name": "Top"}).json()
+    child = client.post("/api/decks", json={"name": "Top::Child"}).json()
+    other = client.post("/api/decks", json={"name": "Other"}).json()
+    client.post("/api/decks", json={"name": "Other::child"})
+
+    # Into itself or one of its own subdecks
+    assert _move(client, top["id"], top["id"]).status_code == 400
+    assert _move(client, top["id"], child["id"]).status_code == 400
+    # A deck with that name is already there (names are case-insensitive)
+    conflict = _move(client, child["id"], other["id"])
+    assert conflict.status_code == 409 and conflict.json()["name"] == "Other::child"
+    # Missing decks
+    assert _move(client, 999999, top["id"]).status_code == 404
+    assert _move(client, top["id"], 999999).status_code == 404
+    assert _find(_tree(client), "Top::Child")
+
+    _add_card(client, other["id"], "for the filtered deck")
+    with client.app.state.cm.use() as col:  # type: ignore[attr-defined]
+        filtered = col.sched.get_or_create_filtered_deck(deck_id=0)
+        filtered.name = "Cram"
+        filtered.config.search_terms[0].search = "deck:Other"
+        cram_id = col.sched.add_or_update_filtered_deck(filtered).id
+    res = _move(client, top["id"], cram_id)
+    assert res.status_code == 400 and "Filtered" in res.json()["detail"]

@@ -21,6 +21,11 @@ export function renameDeck(id: number, name: string): Promise<DeckName> {
   return api<DeckName>(`/api/decks/${id}`, { method: 'PUT', body: { name } });
 }
 
+/** Make a deck (with its subdecks) a subdeck of another deck, or top-level with null. */
+export function moveDeck(id: number, parentId: number | null): Promise<DeckName & { changed: boolean }> {
+  return api(`/api/decks/${id}/move`, { body: { parent_id: parentId } });
+}
+
 export function deckInfo(id: number): Promise<DeckInfo> {
   return api<DeckInfo>(`/api/decks/${id}`);
 }

@@ -123,6 +123,24 @@ def deck_info(deck_id: int, cm: CollectionManager = Depends(get_cm)) -> dict:
         }
 
 
+def _rename(col: Collection, deck_id: int, name: str) -> dict | JSONResponse:
+    """Rename (and so possibly move) a deck, with its subdecks; shared by rename and move."""
+    current = col.decks.name(DeckId(deck_id))
+    if name == current:
+        return {"id": deck_id, "name": current, "changed": False}
+    # Anki would quietly add "+" to a name that's taken; renaming "spanish" to
+    # "Spanish" is fine though.
+    if (existing := col.decks.id_for_name(name)) and existing != deck_id:
+        return _conflict(col, existing)
+    if name.casefold().startswith(current.casefold() + "::"):
+        raise HTTPException(400, "A deck can't be moved inside one of its own subdecks.")
+    try:
+        col.decks.rename(DeckId(deck_id), name)
+    except BackendError as err:  # e.g. moving it under a filtered deck
+        raise HTTPException(400, str(err) or "That deck name can't be used.") from err
+    return {"id": deck_id, "name": _expand_parents(col, DeckId(deck_id)), "changed": True}
+
+
 @router.put("/{deck_id}", response_model=None)
 def rename_deck(
     deck_id: int, body: DeckNameBody, cm: CollectionManager = Depends(get_cm)
@@ -130,22 +148,36 @@ def rename_deck(
     """Rename a deck; a "Parent::Child" name moves it (and its subdecks) under Parent."""
     name = _clean_name(body.name)
     with cm.use() as col:
-        current = _get_deck(col, deck_id)["name"]
-        if name == current:
-            return {"id": deck_id, "name": current}
-        # Anki would quietly add "+" to a name that's taken; renaming "spanish" to
-        # "Spanish" is fine though.
-        if (existing := col.decks.id_for_name(name)) and existing != deck_id:
-            return _conflict(col, existing)
-        if name.casefold().startswith(current.casefold() + "::"):
-            raise HTTPException(400, "A deck can't be moved inside one of its own subdecks.")
-        try:
-            col.decks.rename(DeckId(deck_id), name)
-        except BackendError as err:  # e.g. moving it under a filtered deck
-            raise HTTPException(400, str(err) or "That deck name can't be used.") from err
-        renamed = {"id": deck_id, "name": _expand_parents(col, DeckId(deck_id))}
-    cm.mark_modified()
-    return renamed
+        _get_deck(col, deck_id)
+        result = _rename(col, deck_id, name)
+    if isinstance(result, dict) and result["changed"]:
+        cm.mark_modified()
+    return result
+
+
+class MoveBody(BaseModel):
+    # The deck to put it in, or None to make it a top-level deck.
+    parent_id: int | None = None
+
+
+@router.post("/{deck_id}/move", response_model=None)
+def move_deck(
+    deck_id: int, body: MoveBody, cm: CollectionManager = Depends(get_cm)
+) -> dict | JSONResponse:
+    """Make a deck (with its subdecks) a subdeck of another deck, or a top-level deck."""
+    with cm.use() as col:
+        leaf = _get_deck(col, deck_id)["name"].split("::")[-1]
+        if body.parent_id is None:
+            name = leaf
+        else:
+            parent = _get_deck(col, body.parent_id)
+            if parent["dyn"]:
+                raise HTTPException(400, "Filtered decks can't have subdecks.")
+            name = f"{parent['name']}::{leaf}"
+        result = _rename(col, deck_id, name)
+    if isinstance(result, dict) and result["changed"]:
+        cm.mark_modified()
+    return result
 
 
 @router.delete("/{deck_id}")
